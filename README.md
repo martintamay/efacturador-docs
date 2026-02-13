@@ -89,6 +89,8 @@ Nodo raiz: `DocumentoElectronico`
 
 Nodo: `Cliente`
 
+Nota: este nodo debe ir dentro de `DocumentoElectronico`.
+
 - `CodigoCliente` (texto). Opcional.
 - `Ruc` (texto). RUC sin DV; o documento si no contribuyente.
 - `Dv` (texto). DV del RUC.
@@ -109,6 +111,8 @@ Nodo: `Cliente`
 
 Nodo: `DetalleDocumento`
 
+Nota: este nodo debe ir dentro de `Detalles` en `DocumentoElectronico`.
+
 - `CodigoProducto` o `Codigo` (texto). No debe repetirse dentro del documento.
 - `Descripcion` (texto).
 - `TipoIva` (numero, 1-4).
@@ -123,6 +127,8 @@ Nodo: `DetalleDocumento`
 
 Nodo: `MetodoDePago`
 
+Nota: este nodo debe ir dentro de `MetodosDePago` en `DocumentoElectronico`.
+
 - `TipoDePago` o `TipoPago` (numero). Valores permitidos: 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,99.
 - `Total` (numero, >0).
 - `TarjetaDenominacion` o `DenominacionTarjeta` (numero). 1,2,3,4,5,6,99. Solo para tarjetas.
@@ -131,9 +137,52 @@ Nodo: `MetodoDePago`
 - `NumeroCheque` (texto). Solo si aplica.
 - `BancoCheque` (texto). Solo si aplica.
 
+Opciones de `TipoDePago`:
+
+- 1=Efectivo
+- 2=Cheque
+- 3=Tarjeta de credito
+- 4=Tarjeta de debito
+- 5=Transferencia
+- 6=Giro
+- 7=Billetera electronica
+- 8=Tarjeta empresarial
+- 9=Vale
+- 10=Retencion
+- 11=Pago por anticipo
+- 12=Valor fiscal
+- 13=Valor comercial
+- 14=Compensacion
+- 15=Permuta
+- 16=Pago bancario
+- 17=Pago movil
+- 18=Donacion
+- 19=Promocion
+- 20=Consumo interno
+- 21=Pago electronico
+- 99=Otro
+
+Opciones de `TarjetaDenominacion`:
+
+- 1=Visa
+- 2=Mastercard
+- 3=American Express
+- 4=Maestro
+- 5=Panal
+- 6=Cabal
+- 99=Otro (usar `DescripcionDenominacionTarjeta`)
+
+Opciones de `TarjetaFormaProcesamiento`:
+
+- 1=POS
+- 2=Pago electronico
+- 9=Otro
+
 ## Cuota
 
 Nodo: `Cuota`
+
+Nota: este nodo debe ir dentro de `Cuotas` en `DocumentoElectronico`.
 
 - `Numero` (numero). Numero de cuota.
 - `Vencimiento` (fecha, `yyyy-MM-dd`).
@@ -143,12 +192,16 @@ Nodo: `Cuota`
 
 Nodo: `DocumentoRelacionado`
 
+Nota: este nodo debe ir dentro de `Relacionados` en `DocumentoElectronico`.
+
 - `Tipo` (numero, 1-2). 1=Electronico (usar CDC), 2=Impreso (usar numero completo).
 - `Numero` (texto). Formato `001-001-0000001` para impresos.
 
 ## Anulacion
 
 Nodo raiz: `Anulacion`
+
+Nota: este nodo es el raiz del archivo de anulacion.
 
 - En JSON se acepta el wrapper:
 
@@ -185,6 +238,8 @@ Respuesta (salida en la misma carpeta):
 # Remisiones
 
 Nodo: `RemisionFields` (solo cuando `TipoDocumento=7`)
+
+Nota: este nodo debe ir dentro de `DocumentoElectronico` cuando `TipoDocumento=7`.
 
 - `MotivoEmision` (numero).
 - `ResponsableEmision` (numero).
@@ -256,8 +311,6 @@ Notas:
 - Para remisiones no se validan impuestos ni precios en los detalles; se esperan al menos codigo, descripcion y cantidad.
 
 ## Validaciones (backend web)
-
-Estas reglas se aplican cuando `tax_payer.should_perform_validations = true` en el backend (ver modelos Rails en [others/fse-facturador-externo-web/app/models](others/fse-facturador-externo-web/app/models)).
 
 ### DocumentoElectronico
 
@@ -350,6 +403,53 @@ Estas reglas se aplican cuando `tax_payer.should_perform_validations = true` en 
 </DocumentoElectronico>
 ```
 
+```json
+{
+  "DocumentoElectronico": {
+    "TipoDocumento": 1,
+    "NumeroDocumentoCompleto": "001-001-0000100",
+    "FechaDocumento": "2026-02-13 10:15:00",
+    "TipoTransaccion": 1,
+    "TipoImpuesto": 1,
+    "Total": 110000.00,
+    "TipoOperacion": 1,
+    "IndicadorPresencial": 1,
+    "Condicion": 1,
+    "NumeroTimbrado": 80061256,
+    "Detalles": [
+      {
+        "CodigoProducto": "PROD-001",
+        "Descripcion": "Producto de prueba",
+        "TipoIva": 1,
+        "TasaIva": 10,
+        "Precio": 100000.00,
+        "Cantidad": 1.00,
+        "Descuento": 0.00,
+        "Unidad": "UNI"
+      }
+    ],
+    "MetodosDePago": [
+      {
+        "TipoPago": 1,
+        "Total": 110000.00
+      }
+    ],
+    "Cliente": {
+      "RazonSocial": "Cliente Ejemplo S.A.",
+      "TipoContribuyente": 2,
+      "Ruc": "494829",
+      "Dv": "7",
+      "Correo": "cliente@ejemplo.com",
+      "Direccion": "Av. Principal 123",
+      "NumeroCasa": 123,
+      "CodigoDepartamento": 1,
+      "CodigoDistrito": 1,
+      "CodigoCiudad": 1
+    }
+  }
+}
+```
+
 ### Nota de credito (XML)
 
 ```xml
@@ -396,6 +496,54 @@ Estas reglas se aplican cuando `tax_payer.should_perform_validations = true` en 
     <Dv>7</Dv>
   </Cliente>
 </DocumentoElectronico>
+```
+
+```json
+{
+  "DocumentoElectronico": {
+    "TipoDocumento": 5,
+    "NumeroDocumentoCompleto": "001-001-0000101",
+    "FechaDocumento": "2026-02-13 10:45:00",
+    "TipoTransaccion": 1,
+    "TipoImpuesto": 1,
+    "Total": 55000.00,
+    "TipoOperacion": 1,
+    "IndicadorPresencial": 1,
+    "Condicion": 1,
+    "NumeroTimbrado": 80061256,
+    "MotivoEmision": 2,
+    "Relacionados": [
+      {
+        "Tipo": 1,
+        "Numero": "01800612566001001000010022026021310150000001"
+      }
+    ],
+    "Detalles": [
+      {
+        "CodigoProducto": "PROD-001",
+        "Descripcion": "Devolucion parcial",
+        "TipoIva": 1,
+        "TasaIva": 10,
+        "Precio": 50000.00,
+        "Cantidad": 1.00,
+        "Descuento": 0.00,
+        "Unidad": "UNI"
+      }
+    ],
+    "MetodosDePago": [
+      {
+        "TipoPago": 1,
+        "Total": 55000.00
+      }
+    ],
+    "Cliente": {
+      "RazonSocial": "Cliente Ejemplo S.A.",
+      "TipoContribuyente": 2,
+      "Ruc": "494829",
+      "Dv": "7"
+    }
+  }
+}
 ```
 
 ### Remision (XML)
@@ -467,9 +615,80 @@ Estas reglas se aplican cuando `tax_payer.should_perform_validations = true` en 
 </DocumentoElectronico>
 ```
 
+```json
+{
+  "DocumentoElectronico": {
+    "TipoDocumento": 7,
+    "NumeroDocumentoCompleto": "001-001-0000200",
+    "FechaDocumento": "2026-02-13 11:30:00",
+    "TipoTransaccion": 1,
+    "TipoImpuesto": 1,
+    "Total": 1.00,
+    "TipoOperacion": 1,
+    "IndicadorPresencial": 1,
+    "Condicion": 1,
+    "NumeroTimbrado": 80061256,
+    "Detalles": [
+      {
+        "CodigoProducto": "INS-001",
+        "Descripcion": "Insumos internos",
+        "TipoIva": 1,
+        "TasaIva": 10,
+        "Precio": 1.00,
+        "Cantidad": 1.00,
+        "Descuento": 0.00,
+        "Unidad": "UNI"
+      }
+    ],
+    "Cliente": {
+      "RazonSocial": "Sucursal Central",
+      "TipoContribuyente": 2,
+      "Ruc": "87654321",
+      "Dv": "3",
+      "Direccion": "Ruta 1 Km 10",
+      "NumeroCasa": 10,
+      "CodigoDepartamento": 1,
+      "CodigoDistrito": 1,
+      "CodigoCiudad": 1
+    },
+    "RemisionFields": {
+      "MotivoEmision": 7,
+      "ResponsableEmision": 1,
+      "KilometrosEstimados": 25,
+      "TipoTransporte": 1,
+      "ModalidadTransporte": 1,
+      "ResponsableCosto": 5,
+      "CodigoCondicionNegociacion": "EXW",
+      "FechaInicioTransporte": "2026-02-13",
+      "CodigoPaisDestino": "PRY",
+      "DireccionSalida": "Deposito Central",
+      "NumeroSalida": 100,
+      "DepartamentoSalida": 1,
+      "DistritoSalida": 1,
+      "CiudadSalida": 1,
+      "DireccionEntrega": "Sucursal Central",
+      "NumeroEntrega": 10,
+      "DepartamentoEntrega": 1,
+      "DistritoEntrega": 1,
+      "CiudadEntrega": 1,
+      "TipoVehiculo": 1,
+      "MarcaVehiculo": "Toyota",
+      "TipoIdentificacionVehiculo": 2,
+      "NumeroIdentificacionVehiculo": "ABC-123",
+      "NaturalezaTransportista": 1,
+      "RazonSocialTransportista": "Transporte Propio",
+      "DocumentoTransportista": "80061256",
+      "DVTransportista": "6"
+    }
+  }
+}
+```
+
 ### Respuestas generadas (XML)
 
 Las respuestas de generacion usan el nodo `RespuestaGenerada` con los campos `CDC`, `QR`, `XML` y `PDFUrl`.
+
+Nota: este nodo es raiz en los archivos de salida `gen_*.xml`.
 
 ```xml
 <RespuestaGenerada>
@@ -480,6 +699,17 @@ Las respuestas de generacion usan el nodo `RespuestaGenerada` con los campos `CD
 </RespuestaGenerada>
 ```
 
+```json
+{
+  "RespuestaGenerada": {
+    "CDC": "01800612566001001000010022026021310150000001",
+    "QR": "https://ekuatia.set.gov.py/consultas-test/qr?nVersion=150&Id=01800612566001001000010022026021310150000001",
+    "XML": "<rDE>...</rDE>",
+    "PDFUrl": "https://efacturador.tamaysistemas.com/electronic_documents/12345.pdf"
+  }
+}
+```
+
 ```xml
 <RespuestaGenerada>
   <CDC>01800612566001001000020022026021311300000002</CDC>
@@ -487,4 +717,15 @@ Las respuestas de generacion usan el nodo `RespuestaGenerada` con los campos `CD
   <XML>&lt;rDE&gt;...&lt;/rDE&gt;</XML>
   <PDFUrl>https://efacturador.tamaysistemas.com/electronic_documents/12345.pdf</PDFUrl>
 </RespuestaGenerada>
+```
+
+```json
+{
+  "RespuestaGenerada": {
+    "CDC": "01800612566001001000020022026021311300000002",
+    "QR": "https://ekuatia.set.gov.py/consultas-test/qr?nVersion=150&Id=01800612566001001000020022026021311300000002",
+    "XML": "<rDE>...</rDE>",
+    "PDFUrl": "https://efacturador.tamaysistemas.com/electronic_documents/12345.pdf"
+  }
+}
 ```
