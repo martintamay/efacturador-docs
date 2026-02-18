@@ -1,6 +1,7 @@
 # Formato de documentos de entrada
 
-Esta guia describe el formato de los documentos que el app procesa desde archivos XML o JSON. La estructura se obtiene de los DTOs en [src/main/java/com/tamaysistemas/localfiles/xml](src/main/java/com/tamaysistemas/localfiles/xml) y ejemplos en [xmls/factura001-001-0000225.xml](xmls/factura001-001-0000225.xml) y [xmls/0004428.xml](xmls/0004428.xml).
+Esta guia describe el formato de los documentos que el app procesa desde archivos XML o JSON. La estructura se obtiene de los DTOs en 
+una carpeta configurable.
 
 ## Formato general
 
@@ -67,9 +68,11 @@ Nodo raiz: `DocumentoElectronico`
 - `TipoOperacion` (numero, 1-4). 1=B2B, 2=B2C, 3=B2G, 4=B2F.
 - `TipoImpuesto` (numero, 1-5). 1=IVA, 2=ISC, 3=Renta, 4=Ninguno, 5=IVA-Renta.
 - `Total` (numero, >0). Total recalculado para validar detalles.
-- `DescuentoGlobalPorc` o `PorcentajeDescuentoGlobal` (numero, 0-100). Opcional.
+- `DescuentoGlobalPorc` o `PorcentajeDescuentoGlobal` (numero, 0-100). Opcional. Porcentaje de descuento a aplicar globalmente sobre el precio unitario de cada detalle.
+- `DescuentoGlobal` (numero, >=0). Opcional. Monto total del descuento global en la factura. Se distribuye proporcionalmente entre los detalles según su cantidad.
 - `IndicadorPresencial` (numero, 1,2,3,4,5,6,9).
 - `Condicion` (numero, 1=Contado, 2=Credito).
+- `DescuentoGlobal` (numero, >=0). Monto del descuento global aplicado. Se distribuye entre los detalles del documento.
 - `Cliente` (nodo).
 - `Detalles` (lista `DetalleDocumento`, al menos 1).
 - `MetodosDePago` (lista `MetodoDePago`). Si se omite, se asume efectivo.
@@ -119,7 +122,8 @@ Nota: este nodo debe ir dentro de `Detalles` en `DocumentoElectronico`.
 - `TasaIva` o `Tasa` (numero, 0, 5, 10).
 - `Precio` (numero, >0).
 - `Cantidad` (numero, >0).
-- `Descuento` (numero, >=0).
+- `Descuento` (numero, >=0). Descuento específico de este detalle.
+- `DescuentoGlobal` (numero, >=0). Porción del descuento global aplicada a este detalle. Se calcula automáticamente a partir del descuento global del documento.
 - `Unidad` o `UnidadId` (texto). Ejemplo: `UNI`.
 - `SystemId` (texto). Opcional.
 
@@ -310,6 +314,20 @@ Notas:
 - En el backend, si `CodigoPaisDestino` es distinto de `PRY`, se copian los codigos de salida a los de entrega.
 - Para remisiones no se validan impuestos ni precios en los detalles; se esperan al menos codigo, descripcion y cantidad.
 
+## Descuentos
+
+### Descuentos en DocumentoElectronico
+
+El app soporta descuentos a nivel de detalle y descuentos globales:
+
+1. **Descuento de detalle** (`Descuento`): se aplica directamente a cada `DetalleDocumento`.
+2. **Descuento global por porcentaje** (`DescuentoGlobalPorc` o `PorcentajeDescuentoGlobal`): porcentaje aplicado al precio unitario de cada detalle.
+3. **Descuento global por monto** (`DescuentoGlobal`): monto total de descuento que se distribuye proporcionalmente entre los detalles según su cantidad.
+   - Si el `DescuentoGlobal` es 10 y hay 2 detalles con cantidad 1 cada uno, cada detalle recibe 5 de descuento.
+   - Si hay 1 detalle con cantidad 2, ese detalle recibe todo el descuento de 10.
+
+El campo `DescuentoGlobal` en `DetalleDocumento` se calcula automáticamente a partir del `DescuentoGlobal` del documento durante el procesamiento.
+
 ## Validaciones (backend web)
 
 ### DocumentoElectronico
@@ -319,6 +337,7 @@ Notas:
 - `transaction_type` en 1..13 (solo cuando corresponde).
 - `tax_type` en 1..5.
 - `global_discount_percentage` entre 0 y 100.
+- `global_discount` >= 0. Monto total de descuento global (se distribuye entre los detalles).
 - `exchange_type` en 1..4.
 - `presence_indicator` en {1,2,3,4,5,6,9}.
 - `condition` en 1..2.
@@ -340,6 +359,7 @@ Notas:
 - `price` > 0 (no se valida para remision).
 - `quantity` > 0.
 - `discount` >= 0.
+- `global_discount` >= 0. Descuento global aplicado en este detalle (calculado automáticamente).
 - Si `iva_type` es 2 o 3, `tax_rate` debe ser 0; si es 1 o 4, `tax_rate` debe ser 5 o 10.
 
 ### MetodoDePago
@@ -442,6 +462,128 @@ Notas:
       "Correo": "cliente@ejemplo.com",
       "Direccion": "Av. Principal 123",
       "NumeroCasa": 123,
+      "CodigoDepartamento": 1,
+      "CodigoDistrito": 1,
+      "CodigoCiudad": 1
+    }
+  }
+}
+```
+
+### Factura con Descuento Global (XML)
+
+```xml
+<DocumentoElectronico>
+  <TipoDocumento>1</TipoDocumento>
+  <NumeroDeDocumentoCompleto>001-001-0000102</NumeroDeDocumentoCompleto>
+  <FechaDocumento>2026-02-13 10:45:00</FechaDocumento>
+  <TipoTransaccion>1</TipoTransaccion>
+  <TipoImpuesto>1</TipoImpuesto>
+  <Total>228000.00</Total>
+  <TipoOperacion>1</TipoOperacion>
+  <IndicadorPresencial>1</IndicadorPresencial>
+  <Condicion>1</Condicion>
+  <NumeroTimbrado>80061256</NumeroTimbrado>
+  <DescuentoGlobalPorc>10</DescuentoGlobalPorc>
+  <DescuentoGlobal>20000.00</DescuentoGlobal>
+  <Detalles>
+    <DetalleDocumento>
+      <CodigoProducto>PROD-001</CodigoProducto>
+      <Descripcion>Producto A</Descripcion>
+      <TipoIva>1</TipoIva>
+      <TasaIva>10</TasaIva>
+      <Precio>100000.00</Precio>
+      <Cantidad>1.00</Cantidad>
+      <Descuento>0.00</Descuento>
+      <DescuentoGlobal>10000.00</DescuentoGlobal>
+      <Unidad>UNI</Unidad>
+    </DetalleDocumento>
+    <DetalleDocumento>
+      <CodigoProducto>PROD-002</CodigoProducto>
+      <Descripcion>Producto B</Descripcion>
+      <TipoIva>1</TipoIva>
+      <TasaIva>10</TasaIva>
+      <Precio>100000.00</Precio>
+      <Cantidad>1.00</Cantidad>
+      <Descuento>0.00</Descuento>
+      <DescuentoGlobal>10000.00</DescuentoGlobal>
+      <Unidad>UNI</Unidad>
+    </DetalleDocumento>
+  </Detalles>
+  <MetodosDePago>
+    <MetodoDePago>
+      <TipoPago>1</TipoPago>
+      <Total>228000.00</Total>
+    </MetodoDePago>
+  </MetodosDePago>
+  <Cliente>
+    <RazonSocial>Cliente con Descuento S.A.</RazonSocial>
+    <TipoContribuyente>2</TipoContribuyente>
+    <Ruc>494829</Ruc>
+    <Dv>7</Dv>
+    <Correo>cliente@ejemplo.com</Correo>
+    <Direccion>Av. Principal 456</Direccion>
+    <NumeroCasa>456</NumeroCasa>
+    <CodigoDepartamento>1</CodigoDepartamento>
+    <CodigoDistrito>1</CodigoDistrito>
+    <CodigoCiudad>1</CodigoCiudad>
+  </Cliente>
+</DocumentoElectronico>
+```
+
+```json
+{
+  "DocumentoElectronico": {
+    "TipoDocumento": 1,
+    "NumeroDocumentoCompleto": "001-001-0000102",
+    "FechaDocumento": "2026-02-13 10:45:00",
+    "TipoTransaccion": 1,
+    "TipoImpuesto": 1,
+    "Total": 228000.00,
+    "TipoOperacion": 1,
+    "IndicadorPresencial": 1,
+    "Condicion": 1,
+    "NumeroTimbrado": 80061256,
+    "DescuentoGlobalPorc": 10,
+    "DescuentoGlobal": 20000.00,
+    "Detalles": [
+      {
+        "CodigoProducto": "PROD-001",
+        "Descripcion": "Producto A",
+        "TipoIva": 1,
+        "TasaIva": 10,
+        "Precio": 100000.00,
+        "Cantidad": 1.00,
+        "Descuento": 0.00,
+        "DescuentoGlobal": 10000.00,
+        "Unidad": "UNI"
+      },
+      {
+        "CodigoProducto": "PROD-002",
+        "Descripcion": "Producto B",
+        "TipoIva": 1,
+        "TasaIva": 10,
+        "Precio": 100000.00,
+        "Cantidad": 1.00,
+        "Descuento": 0.00,
+        "DescuentoGlobal": 10000.00,
+        "Unidad": "UNI"
+      }
+    ],
+    "MetodosDePago": [
+      {
+        "TipoPago": 1,
+        "Total": 228000.00
+      }
+    ],
+    "Cliente": {
+      "RazonSocial": "Cliente con Descuento S.A.",
+      "TipoContribuyente": 2,
+      "Ruc": "494829",
+      "Dv": "7",
+      "Correo": "cliente@ejemplo.com",
+      "Direccion": "Av. Principal 456",
+      "NumeroCasa": 456,
       "CodigoDepartamento": 1,
       "CodigoDistrito": 1,
       "CodigoCiudad": 1
