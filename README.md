@@ -61,7 +61,8 @@ Nodo raiz: `DocumentoElectronico`
 - `CodigoEstablecimiento` (numero) y `PuntoExpedicion` (numero). Se pueden omitir si ya vienen en `NumeroDeDocumentoCompleto`.
 - `IdSistema` (texto, max 200). Opcional.
 - `CodigoSeguridad` (texto). Opcional; el app puede generarlo.
-- `NumeroDeDocumentoCompleto` (texto, 001-001-0000001).
+- `InfoIntFisc` (texto, 1-3000). Opcional. Información de interés del Fisco (B006 en SIFEN). En JSON también se aceptan `info_int_fisc` e `infoIntFisc`.
+- `NumeroDocumentoCompleto` (texto, 001-001-0000001). Alias aceptado: `NumeroDeDocumentoCompleto`.
 - `FechaDocumento` (texto, `yyyy-MM-dd HH:mm:ss`).
 - `FechaProceso` (texto, `yyyy-MM-dd HH:mm:ss`). Se completa automaticamente.
 - `TipoTransaccion` (numero, 1-13).
@@ -70,19 +71,19 @@ Nodo raiz: `DocumentoElectronico`
 - `Total` (numero, >0). Total recalculado para validar detalles.
 - `DescuentoGlobalPorc` o `PorcentajeDescuentoGlobal` (numero, 0-100). Opcional. Porcentaje de descuento a aplicar globalmente sobre el precio unitario de cada detalle. **No puede usarse junto con `DescuentoGlobal`.**
 - `DescuentoGlobal` (numero, >=0). Opcional. Monto total del descuento global en la factura. Se distribuye proporcionalmente entre los detalles según su cantidad. **No puede usarse junto con `DescuentoGlobalPorc`.**
-- `IndicadorPresencial` (numero, 1,2,3,4,5,6,9).
+- `IndicadorPresencial` (numero, 1,2,3,4,5,6,9). Alias: `IndicadorPresencia`.
 - `Condicion` (numero, 1=Contado, 2=Credito).
 - `Cliente` (nodo).
 - `Detalles` (lista `DetalleDocumento`, al menos 1).
-- `MetodosDePago` (lista `MetodoDePago`). Si se omite, se asume efectivo.
+- `MetodosDePago` (lista `MetodoDePago`). Alias: `TiposDePago`. Si se omite, se asume efectivo.
 - `TipoCredito` (numero, 1-2). Solo si `Condicion=2`.
 - `TiempoCredito` (texto). Solo si `Condicion=2`.
 - `DiaVencimientoCuotas` (numero, 1-31). Solo si `Condicion=2`.
 - `CantidadCuotas` (numero). Solo si `Condicion=2`.
 - `MontoInicial` (numero). Opcional.
-- `MotivoEmision` (numero, 1-8). Solo para nota de credito.
-- `Cuotas` (lista `Cuota`).
-- `Relacionados` (lista `DocumentoRelacionado`).
+- `MotivoEmision` (numero, 1-8). Solo para nota de credito (para remisiones va dentro de `RemisionFields`).
+- `Cuotas` (lista `Cuota`). Alias: `Cuota`.
+- `Relacionados` (lista `DocumentoRelacionado`). Obligatorio en notas de credito/debito; ver [DocumentoRelacionado](#documentorelacionado).
 - `RemisionFields` (nodo). Solo si `TipoDocumento=7`.
 - `CodigoMoneda` (texto, default `PYG`).
 - `PrecioTasaCambio` (numero, default `1.0`).
@@ -195,10 +196,50 @@ Nota: este nodo debe ir dentro de `Cuotas` en `DocumentoElectronico`.
 
 Nodo: `DocumentoRelacionado`
 
-Nota: este nodo debe ir dentro de `Relacionados` en `DocumentoElectronico`.
+Nota: este nodo debe ir dentro de `Relacionados` en `DocumentoElectronico`. Es lo que vincula una nota de credito/debito con el documento original (grupo `gCamDEAsoc` de SIFEN).
 
-- `Tipo` (numero, 1-2). 1=Electronico (usar CDC), 2=Impreso (usar numero completo).
-- `Numero` (texto). Formato `001-001-0000001` para impresos.
+- `Tipo` (numero, 1-2). 1=Electronico (usar CDC), 2=Impreso (usar numero completo, timbrado y fecha). Si se omite se asume 1. Alias: `TipoDocumento`. El tipo 3 (constancia electronica) no esta soportado por el app Java.
+- `Numero` (texto). Forma generica: con `Tipo=1` se toma como CDC; con `Tipo=2` se toma como numero completo. Alias: `CDC`, `NumeroDocumentoCompleto`. Se recomienda usar los campos especificos de abajo.
+
+Documento relacionado **electronico** (`Tipo=1`):
+
+- `CDC` (texto, 44 digitos). Obligatorio. Es el unico dato que se envia a SIFEN (`dCdCDERef`); el app **no** lo deduce a partir de numero y timbrado (ver [Resolucion del CDC](#resolucion-del-cdc)).
+
+Documento relacionado **impreso** (`Tipo=2`), por ejemplo una factura preimpresa anterior a la facturacion electronica:
+
+- `NumeroDocumentoCompleto` (texto). Formato `001-001-0000001`. Se divide en establecimiento / punto de expedicion / numero (`dEstDocAso`, `dPExpDocAso`, `dNumDocAso`).
+- `NumeroTimbrado` (texto). Timbrado del documento impreso (`dNTimDI`).
+- `FechaDocumento` (fecha, `yyyy-MM-dd`). Fecha de emision del documento impreso (`dFecEmiDI`).
+- `TipoDocumentoRelacionado` (numero, 1-5). Tipo de documento impreso (`iTipoDocAso`): 1=Factura, 2=Nota de credito, 3=Nota de debito, 4=Nota de remision, 5=Comprobante de retencion. **Pendiente:** SIFEN lo exige cuando `Tipo=2`, pero el parser actual (`GenRelatedDocument` / `DocumentFileProcessor.parseRelatedDocuments`) todavia no lo lee, por lo que hoy se omite del DE aunque se informe en el archivo.
+
+Ejemplo de documento impreso (XML):
+
+```xml
+<Relacionados>
+  <DocumentoRelacionado>
+    <Tipo>2</Tipo>
+    <NumeroDocumentoCompleto>001-001-0000045</NumeroDocumentoCompleto>
+    <NumeroTimbrado>12345678</NumeroTimbrado>
+    <FechaDocumento>2025-06-30</FechaDocumento>
+    <TipoDocumentoRelacionado>1</TipoDocumentoRelacionado>
+  </DocumentoRelacionado>
+</Relacionados>
+```
+
+## Resolucion del CDC
+
+El CDC (44 digitos) identifica un documento electronico ante SIFEN. Segun el codigo de `fse-facturador-externo-web`:
+
+- **Quien lo genera.** El CDC no se calcula al recibir el documento, sino al enviarlo: `SendElectronicDocumentJob` arma el DE con `SifenSync::DeBuilderService` (`obtener_cdc`) y guarda `cdc`, `qr` y `xml` en `electronic_documents` (columna indexada). En el app Java lo genera la libreria SIFEN y vuelve en `RespuestaGenerada`.
+- **De numero + timbrado a documento.** El web identifica un documento propio por `document_type` + `establishment_code` + `expedition_point` + `document_number` + timbrado, restringido al contribuyente (token). Pasos:
+  1. El numero `NNN-NNN-NNNNNNN` se separa en establecimiento, punto de expedicion y numero. La API acepta tambien solo digitos y los completa con ceros a la izquierda hasta 13 (`normalized_full_document_number_from_params`).
+  2. Se busca el `Stamping` por `document_type` + `stamping_number` + `establishment_code` + `expedition_point` y se obtiene su `stamping_id` (`set_stamping_id` / `find_stamping_id`). Si no hay timbrado coincidente, `stamping_id` queda vacio.
+  3. Se busca el documento por tipo, establecimiento, punto, numero y `stamping_id` (`find_document_by_content`). La combinacion es unica (`validates_uniqueness_of :document_number, scope: [establishment_code, expedition_point, stamping_id]`).
+  4. El `cdc` es entonces el campo `cdc` de ese documento. Endpoints: `GET /api/documents/by_content/:document_type/:establishment_code/:expedition_point/:document_number/:stamping_number` (devuelve el documento con su `cdc`), `PUT` en la misma ruta para modificarlo y `DELETE .../nullify` para anularlo.
+  5. En sentido inverso, `GET /electronic_documents/cdc/:cdc` y `PUT .../cdc/:cdc` (y `PUT /api/documents/cdc/:cdc`) ubican el documento por CDC.
+- **Documentos relacionados (NC/ND).** El web guarda el CDC tal como llega y **no lo resuelve** a partir de numero y timbrado: `Relacionados` con CDC se guardan como tipo 1 (`dCdCDERef`); sin CDC se guardan como tipo 2 con numero, timbrado, fecha y tipo (`dNTimDI`, `dEstDocAso`, `dPExpDocAso`, `dNumDocAso`, `iTipoDocAso`, `dFecEmiDI`). La vinculacion NC -> factura (saldo pendiente de la factura, `related_document`) se hace comparando `cdc` entre el documento relacionado y `electronic_documents.cdc`, por lo que una NC con relacion de tipo 2 (impreso) no se enlaza a una factura electronica del sistema.
+- **En este app (Java).** `DocumentFileProcessor.parseRelatedDocuments` copia el `CDC` (o `Numero`) para `Tipo=1` y numero/timbrado/fecha para `Tipo=2`; `SifenElectronicDocument.getDocumentosAsociados` arma el `gCamDEAsoc`. Si una NC debe apuntar a una factura electronica, el archivo de entrada debe traer su CDC (el que devolvio `gen_*` en `RespuestaGenerada`, o el consultado en el web por numero y timbrado como se describe arriba).
+- **Anulaciones.** Con `CDC` se consulta `GET /electronic_documents/cdc/{cdc}`. Con `NumeroDocumentoCompleto` (o sus componentes) el app llama `GET /electronic_documents/by_content?q=<numero>` y filtra localmente por numero completo y, si se informo, `NumeroTimbrado`. Ojo: no se filtra por `TipoDocumento` y en `fse-facturador-externo-web` no se encontro una ruta `GET /electronic_documents/by_content` (la existente es `PUT by-content/...` y la API `GET /api/documents/by_content/...`), por lo que la anulacion por numero deberia verificarse; el metodo recomendado sigue siendo `CDC`.
 
 ## Anulacion
 
@@ -220,14 +261,14 @@ Nota: este nodo es el raiz del archivo de anulacion.
 - `IdSistema` (texto). Opcional si se informa CDC o numero de documento.
 - `CDC` (texto). Opcional si se informa IdSistema o numero de documento.
 - `NumeroDocumentoCompleto` (texto). Opcional si se informa IdSistema o CDC.
-- `TipoDocumento` (numero). Requerido si se usa numero de documento.
+- `TipoDocumento` (numero). Se informa junto con el numero de documento (hoy el app no lo usa para filtrar).
 - `NumeroTimbrado` (numero). Requerido si se usa numero de documento.
 - `CodigoEstablecimiento` (numero). Requerido si se usa numero de documento.
 - `PuntoExpedicion` (numero). Requerido si se usa numero de documento.
 - `NumeroDocumento` (numero). Requerido si se usa numero de documento.
-- `MotivoAnulacion` (texto). Requerido.
+- `MotivoAnulacion` (texto). Requerido. Alias: `CancellationReason`.
 
-Metodos de identificacion soportados:
+Metodos de identificacion soportados (en este orden de prioridad: `CDC`, `IdSistema`, numero de documento):
 
 - Por `CDC` (recomendado).
 - Por componentes: `NumeroTimbrado`, `CodigoEstablecimiento`, `PuntoExpedicion`, `NumeroDocumento`.
@@ -372,7 +413,9 @@ El app soporta descuentos a nivel de detalle y descuentos globales. **No se pued
 
 ### DocumentoRelacionado
 
-- `document_type` requerido y en 1..8.
+- `document_type` requerido y en 1..8 (1=electronico, 2=impreso, 3=constancia electronica).
+- Tipo 2: se esperan `full_document_number`, `stamping_number`, `document_date` y `type_of_related_document` (1..5).
+- Tipo 3: `constancia_type` en 1..2; con `constancia_type=2` se exigen `constancia_number` y `constancia_control_number`.
 
 ## Ejemplos
 
@@ -801,6 +844,50 @@ El app soporta descuentos a nivel de detalle y descuentos globales. **No se pued
       "Dv": "7"
     }
   }
+}
+```
+
+### Nota de credito sobre factura impresa (XML)
+
+Cuando la factura original no es electronica no existe CDC: se informa el documento impreso.
+
+```xml
+<DocumentoElectronico>
+  <TipoDocumento>5</TipoDocumento>
+  <NumeroDocumentoCompleto>001-001-0000102</NumeroDocumentoCompleto>
+  <FechaDocumento>2026-02-13 10:50:00</FechaDocumento>
+  <TipoTransaccion>1</TipoTransaccion>
+  <TipoImpuesto>1</TipoImpuesto>
+  <Total>55000.00</Total>
+  <TipoOperacion>1</TipoOperacion>
+  <IndicadorPresencial>1</IndicadorPresencial>
+  <Condicion>1</Condicion>
+  <NumeroTimbrado>80061256</NumeroTimbrado>
+  <MotivoEmision>2</MotivoEmision>
+  <Relacionados>
+    <DocumentoRelacionado>
+      <Tipo>2</Tipo>
+      <NumeroDocumentoCompleto>001-001-0000045</NumeroDocumentoCompleto>
+      <NumeroTimbrado>12345678</NumeroTimbrado>
+      <FechaDocumento>2025-06-30</FechaDocumento>
+      <TipoDocumentoRelacionado>1</TipoDocumentoRelacionado>
+    </DocumentoRelacionado>
+  </Relacionados>
+  <!-- Detalles, MetodosDePago y Cliente igual que en la nota de credito anterior -->
+</DocumentoElectronico>
+```
+
+```json
+{
+  "Relacionados": [
+    {
+      "Tipo": 2,
+      "NumeroDocumentoCompleto": "001-001-0000045",
+      "NumeroTimbrado": "12345678",
+      "FechaDocumento": "2025-06-30",
+      "TipoDocumentoRelacionado": 1
+    }
+  ]
 }
 ```
 
